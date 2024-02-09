@@ -1,0 +1,121 @@
+# Give collectors RBAC to access metrics
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: ploffay
+---
+# TLS for prometheus receiver
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cabundle
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+---
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+spec:
+  volumeMounts:
+    - name: cabundle-volume
+      mountPath: /etc/pki/ca-trust/source/service-ca
+      readOnly: true
+  volumes:
+    - name: cabundle-volume
+      configMap:
+        name: cabundle
+  mode: deployment
+  observability:
+    metrics:
+      # creates service monitor for enabled prometheus and collector service monitoring
+      enableMetrics: false
+  config: |
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'federate'
+              scrape_interval: 15s
+              scheme: https
+              tls_config:
+                ca_file: /etc/pki/ca-trust/source/service-ca/service-ca.crt
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              honor_labels: true
+              params:
+                'match[]':
+                  - '{job="kubelet"}'
+              metrics_path: '/federate'
+              static_configs:
+                - targets: 
+                  - "prometheus-k8s.openshift-monitoring.svc.cluster.local:9091"
+      
+      prometheus/uwm:
+        config:
+          scrape_configs:
+            - job_name: 'federate'
+              scrape_interval: 15s
+              scheme: https
+              tls_config:
+                ca_file: /etc/pki/ca-trust/source/service-ca/service-ca.crt
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              honor_labels: true
+              params:
+                'match[]':
+                  - '{job="otel-collector-monitoring"}'
+              metrics_path: '/federate'
+              static_configs:
+                - targets: 
+                  - "prometheus-user-workload.openshift-user-workload-monitoring.svc.cluster.local:9092"
+      
+      otlp:
+        protocols:
+          grpc:
+          http:
+    processors:
+    
+    exporters:
+      debug:
+        verbosity: detailed
+      prometheus:
+        endpoint: 0.0.0.0:8989
+        metric_expiration: 10m
+    
+    service:
+      # Expose internal telemetry of the collector
+      # and the metrics are sent through the pipeline to the metrics backend.
+      telemetry:
+        metrics:
+          address: 0.0.0.0:8888
+      pipelines:
+        metrics:
+          receivers: [otlp,prometheus/uwm]
+          processors: []
+          exporters: [prometheus]
+---
+# Create service monitor for collector service monitoring
+# the metrics will be stored in UWM
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otelcollector
+spec:
+  endpoints:
+    - port: monitoring
+      # not wanted the metrics are scraped from internal prometheus
+#    - port: prometheus
+  namespaceSelector:
+    matchNames:
+      - ploffay
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: ploffay.otel
+      app.kubernetes.io/managed-by: opentelemetry-operator
