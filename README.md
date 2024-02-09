@@ -17,7 +17,8 @@ The idea is to configure Vector with Vector Remap Language ([VRL](https://vector
 * OTLP JSON examples https://github.com/open-telemetry/opentelemetry-proto/blob/main/examples/README.md
 * https://github.com/jcantrill/cluster-logging-operator/blob/log4531/internal/generator/vector/conf_test/complex_otel.toml
 * https://github.com/jcantrill/cluster-logging-operator/blob/log4531/internal/generator/vector/normalize/schema/otel/transform.go#L23
-* `RELATED_IMAGE_VECTOR=quay.io/openshift-logging/vector:5.9.0 go test --tags=vector`
+* `~/projects/openshift/cluster-logging-operator/test/functional/normalization/schema (log4531*) » KUBECONFIG=${HOME}/.kube/config  RELATED_IMAGE_VECTOR=quay.io/openshift-logging/vector:5.8.0 go test --tags=vector  ./... `
+* there are containers `http` (otelcol) and `collector` (vector)
 * https://issues.redhat.com/browse/LOG-4531 and https://github.com/jcantrill/cluster-logging-operator/tree/log4531
 
 ## Tracing
