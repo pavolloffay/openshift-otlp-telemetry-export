@@ -18,7 +18,7 @@ The idea is to configure Vector with Vector Remap Language ([VRL](https://vector
 * https://github.com/jcantrill/cluster-logging-operator/blob/log4531/internal/generator/vector/conf_test/complex_otel.toml
 * https://github.com/jcantrill/cluster-logging-operator/blob/log4531/internal/generator/vector/normalize/schema/otel/transform.go#L23
 * `~/projects/openshift/cluster-logging-operator/test/functional/normalization/schema (log4531*) » KUBECONFIG=${HOME}/.kube/config  RELATED_IMAGE_VECTOR=quay.io/openshift-logging/vector:5.8.0 go test --tags=vector  ./... `
-*  https://github.com/pavolloffay/cluster-logging-operator/tree/log4531-pavol
+*  https://github.com/pavolloffay/cluster-logging-operator/tree/log4531-pavol recording https://vimeo.com/manage/videos/912553320/2f71aa6874?extension_recording=true
 * there are containers `http` (otelcol) and `collector` (vector)
 * https://issues.redhat.com/browse/LOG-4531 and https://github.com/jcantrill/cluster-logging-operator/tree/log4531
 
