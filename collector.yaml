@@ -10,13 +10,14 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: otel-collector
-    namespace: ploffay
+    namespace: observability
 ---
 # TLS for prometheus receiver
 kind: ConfigMap
 apiVersion: v1
 metadata:
   name: cabundle
+  namespace: observability
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
 ---
@@ -24,6 +25,7 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: OpenTelemetryCollector
 metadata:
   name: otel
+  namespace: observability
 spec:
   volumeMounts:
     - name: cabundle-volume
@@ -33,7 +35,13 @@ spec:
     - name: cabundle-volume
       configMap:
         name: cabundle
-  mode: deployment
+  mode: statefulset
+  targetAllocator:
+    enabled: true
+    prometheusCR:
+      enabled: true
+      serviceMonitorSelector:
+        app: frontend
   observability:
     metrics:
       # creates service monitor for enabled prometheus and collector service monitoring
@@ -44,16 +52,22 @@ spec:
         config:
           scrape_configs:
             - job_name: 'federate'
-              scrape_interval: 15s
+              scrape_interval: 5s
               scheme: https
               tls_config:
                 ca_file: /etc/pki/ca-trust/source/service-ca/service-ca.crt
               bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-              honor_labels: true
+              honor_labels: false
               params:
                 'match[]':
-                  - '{job="kubelet"}'
+                  - '{__name__=~"cluster:usage:containers:sum"}'
+                  - '{__name__=~"cluster:cpu_usage_cores:sum|cluster:memory_usage_bytes:sum"}'
+                  - '{__name__=~"workload:cpu_usage_cores:sum|workload:memory_usage_bytes:sum"}'
+                  - '{__name__="namespace_memory:kube_pod_container_resource_limits:sum|namespace_memory:kube_pod_container_resource_requests:sum|namespace_cpu:kube_pod_container_resource_limits:sum|namespace_cpu:kube_pod_container_resource_requests:sum|"}'
               metrics_path: '/federate'
+              metric_relabel_configs:
+              - action: labeldrop
+                regex: '(prometheus_replica|prometheus)'
               static_configs:
                 - targets: 
                   - "prometheus-k8s.openshift-monitoring.svc.cluster.local:9091"
@@ -67,7 +81,7 @@ spec:
               tls_config:
                 ca_file: /etc/pki/ca-trust/source/service-ca/service-ca.crt
               bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-              honor_labels: true
+              honor_labels: false
               params:
                 'match[]':
                   - '{job="otel-collector-monitoring"}'
@@ -97,7 +111,7 @@ spec:
           address: 0.0.0.0:8888
       pipelines:
         metrics:
-          receivers: [otlp,prometheus/uwm]
+          receivers: [otlp,prometheus]
           processors: []
           exporters: [prometheus]
 ---
@@ -107,6 +121,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: otelcollector
+  namespace: observability
 spec:
   endpoints:
     - port: monitoring
