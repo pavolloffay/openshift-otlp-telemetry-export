@@ -1,0 +1,30 @@
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  namespace: openshift-logging
+  name: lokistack-dev
+spec:
+  managementState: Managed
+  size: 1x.demo
+  storage:
+    schemas:
+      - effectiveDate: '2020-10-11'
+        version: v11
+    secret:
+      name: minio-test
+      type: s3
+  storageClassName: crc-csi-hostpath-provisioner
+  tenants:
+    mode: openshift-logging
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-test
+  namespace: openshift-logging
+stringData:
+  endpoint: http://minio.minio.svc:9000
+  bucketnames: tempo
+  access_key_id: tempo
+  access_key_secret: supersecret
+type: Opaque
