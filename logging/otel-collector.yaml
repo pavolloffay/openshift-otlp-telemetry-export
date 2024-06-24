@@ -30,7 +30,7 @@ metadata:
   name: otel
   namespace: openshift-logging
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.102.1
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.103.0
   volumeMounts:
     - name: cabundle-volume
       mountPath: /etc/pki/ca-trust/source/service-ca
@@ -60,6 +60,9 @@ spec:
           - key: loki.resource.labels
             value: collector_type, log_type
             action: insert
+          - key: loki.format
+            action: insert
+            value: json
       attributes:
         actions:
           - key: log_type
@@ -79,7 +82,7 @@ spec:
       loki:
         endpoint: https://lokistack-dev-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/loki/api/v1/push
         default_labels_enabled:
-          exporter: false
+          exporter: true
           job: true
         headers:
           "X-Scope-OrgID": application
@@ -101,5 +104,5 @@ spec:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: [attributes, resource]
+          processors: [resource]
           exporters: [debug,loki]
