@@ -14,12 +14,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: otel-collector
-    namespace: ploffay
+    namespace: openshift-logging
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cabundle
+  namespace: openshift-logging
   annotations:
     "service.beta.openshift.io/inject-cabundle": "true"
 ---
@@ -27,8 +28,9 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   name: otel
+  namespace: openshift-logging
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.103.0
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.102.1
   volumeMounts:
     - name: cabundle-volume
       mountPath: /etc/pki/ca-trust/source/service-ca
@@ -47,13 +49,31 @@ spec:
           grpc: {}
           http: {}
     processors:
-      memory_limiter:
-        check_interval: 1s
-        limit_percentage: 75
-        spike_limit_percentage: 15
-      batch:
-        send_batch_size: 10000
-        timeout: 10s
+      resource:
+        attributes:
+          - key: log_type
+            value: application
+            action: upsert
+          - key: collector_type
+            value: otel
+            action: upsert
+          - key: loki.resource.labels
+            value: collector_type, log_type
+            action: insert
+      attributes:
+        actions:
+          - key: log_type
+            value: application
+            action: upsert
+          - key: collector_type
+            value: otel
+            action: upsert
+          - key: kubernetes_namespace_name
+            value: tutorial-application
+            action: upsert
+          - key: loki.attribute.labels
+            value: collector_type, log_type
+            action: insert
 
     exporters:
       loki:
@@ -64,12 +84,14 @@ spec:
         headers:
           "X-Scope-OrgID": application
         tls:
-          ca_file: "/etc/pki/ca-trust/source/service-ca/service-ca.crt"
+#          ca_file: "/etc/pki/ca-trust/source/service-ca/service-ca.crt"
+          ca_file: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 #          server_name_override: "lokistack-dev-gateway-http.openshift-logging.svc.cluster.local"
 #          insecure_skip_verify: true
         auth:
           authenticator: bearertokenauth
-      debug: {}
+      debug:
+        verbosity: detailed
 
     service:
       telemetry:
@@ -79,5 +101,5 @@ spec:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: []
+          processors: [attributes, resource]
           exporters: [debug,loki]
