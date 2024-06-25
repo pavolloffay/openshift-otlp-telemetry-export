@@ -9,7 +9,7 @@ spec:
   storage:
     schemas:
       - effectiveDate: '2020-10-11'
-        version: v11
+        version: v12
     secret:
       name: minio-test
       type: s3

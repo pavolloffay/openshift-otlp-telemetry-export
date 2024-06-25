@@ -4,25 +4,33 @@ metadata:
   name: ploffay
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector-logs-writer
+rules:
+ - apiGroups:
+   - loki.grafana.com
+   resourceNames:
+   - logs
+   resources:
+   - application
+   - audit
+   - infrastructure
+   verbs:
+   - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: otel-collector-logs-writer
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: logging-collector-logs-writer
+  name: otel-collector-logs-writer
 subjects:
   - kind: ServiceAccount
     name: otel-collector
     namespace: openshift-logging
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cabundle
-  namespace: openshift-logging
-  annotations:
-    "service.beta.openshift.io/inject-cabundle": "true"
 ---
 apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
@@ -51,32 +59,38 @@ spec:
     processors:
       resource:
         attributes:
-          - key: log_type
-            value: application
-            action: upsert
           - key: collector_type
             value: otel
-            action: upsert
-          - key: loki.resource.labels
-            value: collector_type, log_type
             action: insert
           - key: loki.format
             action: insert
             value: json
-      attributes:
-        actions:
+          - key:  kubernetes_namespace_name
+            from_attribute: k8s.namespace.name
+            action: upsert
+          - key:  kubernetes_pod_name
+            from_attribute: k8s.pod.name
+            action: upsert
+          - key: kubernetes_container_name
+            from_attribute: k8s.container.name
+            action: upsert
           - key: log_type
             value: application
             action: upsert
-          - key: collector_type
-            value: otel
-            action: upsert
-          - key: kubernetes_namespace_name
-            value: tutorial-application
-            action: upsert
-          - key: loki.attribute.labels
-            value: collector_type, log_type
+          - key: loki.resource.labels
+            value: log_type, kubernetes_namespace_name, kubernetes_pod_name, kubernetes_container_name, collector_type
             action: insert
+      attributes:
+        actions:
+          - key: loki.attribute.labels
+            value: level
+            action: insert
+      transform:
+        log_statements:
+          - context: resource
+          - context: log
+            statements:
+              - set(attributes["level"], ConvertCase(severity_text, "lower"))
 
     exporters:
       loki:
@@ -87,7 +101,6 @@ spec:
         headers:
           "X-Scope-OrgID": application
         tls:
-#          ca_file: "/etc/pki/ca-trust/source/service-ca/service-ca.crt"
           ca_file: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
 #          server_name_override: "lokistack-dev-gateway-http.openshift-logging.svc.cluster.local"
 #          insecure_skip_verify: true
@@ -104,5 +117,5 @@ spec:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: [resource]
+          processors: [transform, resource]
           exporters: [debug,loki]
