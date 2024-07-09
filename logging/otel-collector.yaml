@@ -82,17 +82,11 @@ spec:
               - set(attributes["message"], body)
 
     exporters:
-      loki:
-        endpoint: https://lokistack-dev-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/loki/api/v1/push
-        default_labels_enabled:
-          exporter: true
-          job: true
-        headers:
-          "X-Scope-OrgID": application
+      otlphttp:
+        endpoint: https://lokistack-dev-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/otlp
+        encoding: json
         tls:
           ca_file: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
-#          server_name_override: "lokistack-dev-gateway-http.openshift-logging.svc.cluster.local"
-#          insecure_skip_verify: true
         auth:
           authenticator: bearertokenauth
       debug:
@@ -107,4 +101,4 @@ spec:
         logs:
           receivers: [otlp]
           processors: [transform, resource]
-          exporters: [debug,loki]
+          exporters: [debug,otlphttp]
