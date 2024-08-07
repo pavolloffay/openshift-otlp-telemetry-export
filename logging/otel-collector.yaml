@@ -31,7 +31,7 @@ metadata:
   name: otel
   namespace: openshift-logging
 spec:
-  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.103.0
+  image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.106.1
   config:
     extensions:
       bearertokenauth:
@@ -39,8 +39,10 @@ spec:
     receivers:
       otlp:
         protocols:
-          grpc: {}
-          http: {}
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
     processors:
       resource:
         attributes:
@@ -82,6 +84,13 @@ spec:
               - set(attributes["message"], body)
 
     exporters:
+      otlphttp:
+        endpoint: https://lokistack-dev-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/otlp
+        encoding: json
+        tls:
+          ca_file: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+        auth:
+          authenticator: bearertokenauth
       loki:
         endpoint: https://lokistack-dev-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/loki/api/v1/push
         default_labels_enabled:
@@ -106,5 +115,5 @@ spec:
       pipelines:
         logs:
           receivers: [otlp]
-          processors: [transform, resource]
-          exporters: [debug,loki]
+          processors: []
+          exporters: [debug,otlphttp]
