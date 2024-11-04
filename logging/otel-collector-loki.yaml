@@ -1,0 +1,113 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector-logs-writer
+rules:
+ - apiGroups:
+   - loki.grafana.com
+   resourceNames:
+   - logs
+   resources:
+   - application
+   verbs:
+   - create
+ - apiGroups: [""]
+   resources: ["pods", "namespaces", "nodes"]
+   verbs: ["get", "watch", "list"]
+ - apiGroups: ["apps"]
+   resources: ["replicasets"]
+   verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector-logs-writer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector-logs-writer
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: openshift-logging
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel
+  namespace: openshift-logging
+spec:
+  config:
+    extensions:
+      bearertokenauth:
+        filename: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      k8sattributes: {}
+      resource:
+        attributes:
+          - key: collector_type
+            value: otel
+            action: insert
+          - key: loki.format
+            action: insert
+            value: logfmt
+          - key:  kubernetes_namespace_name
+            from_attribute: k8s.namespace.name
+            action: upsert
+          - key:  kubernetes_pod_name
+            from_attribute: k8s.pod.name
+            action: upsert
+          - key: kubernetes_container_name
+            from_attribute: k8s.container.name
+            action: upsert
+          - key: log_type
+            value: application
+            action: upsert
+          - key: loki.resource.labels
+            value: log_type, kubernetes_namespace_name, kubernetes_pod_name, kubernetes_container_name, collector_type
+            action: insert
+      attributes:
+        actions:
+          - key: loki.attribute.labels
+            value: level
+            action: insert
+      transform:
+        log_statements:
+          - context: log
+            statements:
+              - set(attributes["level"], ConvertCase(severity_text, "lower"))
+          - context: log
+            statements:
+#               message is used by the OCP console to render the message. If the message is not there it shows the entire payload
+#               however this sets the message as an attribute which is not recognized by the console
+              - set(attributes["message"], body)
+
+    exporters:
+      loki:
+        endpoint: https://logging-loki-gateway-http.openshift-logging.svc.cluster.local:8080/api/logs/v1/application/loki/api/v1/push
+        headers:
+          "X-Scope-OrgID": application
+        tls:
+          ca_file: "/var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt"
+        auth:
+          authenticator: bearertokenauth
+      debug:
+        verbosity: detailed
+
+    service:
+      telemetry:
+        logs:
+          level: debug
+      extensions: [bearertokenauth]
+      pipelines:
+        logs:
+          receivers: [otlp]
+          processors: [k8sattributes, resource]
+          exporters: [debug,loki]
